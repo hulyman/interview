@@ -1,9 +1,13 @@
 <?php
 
-class Desk {
+class Desk
+{
     private $figures = [];
 
-    public function __construct() {
+    private $is_turn_white = true;
+
+    public function __construct()
+    {
         $this->figures['a'][1] = new Rook(false);
         $this->figures['b'][1] = new Knight(false);
         $this->figures['c'][1] = new Bishop(false);
@@ -41,23 +45,91 @@ class Desk {
         $this->figures['h'][8] = new Rook(true);
     }
 
-    public function move($move) {
+    public function move($move)
+    {
         if (!preg_match('/^([a-h])(\d)-([a-h])(\d)$/', $move, $match)) {
             throw new \Exception("Incorrect move");
         }
 
         $xFrom = $match[1];
         $yFrom = $match[2];
-        $xTo   = $match[3];
-        $yTo   = $match[4];
+        $xTo = $match[3];
+        $yTo = $match[4];
 
-        if (isset($this->figures[$xFrom][$yFrom])) {
-            $this->figures[$xTo][$yTo] = $this->figures[$xFrom][$yFrom];
+        if (!isset($this->figures[$xFrom][$yFrom])) {
+            throw new \Exception("Нельзя двигать несуществующую фигуру.");
         }
+
+        /** @var Figure $figure_to_move */
+        $figure_to_move = $this->figures[$xFrom][$yFrom];
+
+        if ($this->is_turn_white != $figure_to_move->getIsWhite()) {
+            throw new \Exception('Нельзя двигать фигуру, чей ход не подошел.');
+        }
+
+        /** @var Figure|null $figure_to_eat */
+        $figure_to_eat = $this->figures[$xTo][$yTo];
+
+        if (!empty($figure_to_eat) && $figure_to_move->getIsWhite() == $figure_to_eat->getIsWhite()) {
+            // TODO рокировка?
+            throw new UnavailableTurnException($figure_to_move, $move);
+        }
+
+
+        $xMove = abs(ord($xTo) - ord($xFrom));
+        $yMove = ($yTo - $yFrom) * ($figure_to_move->getIsWhite() ? 1 : -1);
+
+        if ($xMove == 0 && $yMove == 0) {
+            throw new UnavailableTurnException($figure_to_move, $move);
+        }
+
+        if ($figure_to_move instanceof Pawn) {
+
+            if (abs($xMove) > 1) {
+                throw new UnavailableTurnException($figure_to_move, $move);
+            }
+
+            switch ($yMove) {
+                case 1:
+                    if ($xMove == 0 && !empty($figure_to_eat)) {
+                        throw new UnavailableTurnException($figure_to_move, $move);
+                    }
+
+                    if ($xMove == 1 && empty($figure_to_eat)) {
+                        throw new UnavailableTurnException($figure_to_move, $move);
+                    }
+                    break;
+                case 2:
+                    if (!$figure_to_move->getIsFirstTurn()) {
+                        throw new UnavailableTurnException($figure_to_move, $move);
+                    }
+
+                    if ($xMove != 0) {
+                        throw new UnavailableTurnException($figure_to_move, $move);
+                    }
+
+                    if (!empty($this->figures[$xFrom][$yFrom - ($figure_to_move->getIsWhite() ? -1 : 1)])) {
+                        throw new UnavailableTurnException($figure_to_move, $move);
+                    }
+
+                    break;
+                default:
+                    throw new UnavailableTurnException($figure_to_move, $move);
+                    break;
+            }
+
+
+            $figure_to_move->makeTurn();
+        }
+
+        $this->figures[$xTo][$yTo] = $this->figures[$xFrom][$yFrom];
         unset($this->figures[$xFrom][$yFrom]);
+
+        $this->is_turn_white = !$this->is_turn_white;
     }
 
-    public function dump() {
+    public function dump()
+    {
         for ($y = 8; $y >= 1; $y--) {
             echo "$y ";
             for ($x = 'a'; $x <= 'h'; $x++) {
